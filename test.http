@@ -1,0 +1,25 @@
+### Test forgot password endpoint
+POST http://localhost:3000/auth/forgot-password
+Content-Type: application/json
+
+{
+    "email": "test@example.com"
+}
+
+### Test reset password endpoint (replace TOKEN with the token received from forgot-password)
+POST http://localhost:3000/auth/reset-password
+Content-Type: application/json
+
+{
+    "token": "REPLACE_WITH_ACTUAL_TOKEN",
+    "newPassword": "newpassword123"
+}
+
+### Test login with new password
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+    "email": "test@example.com",
+    "password": "newpassword123"
+}

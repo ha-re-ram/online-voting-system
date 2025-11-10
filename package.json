@@ -1,0 +1,29 @@
+{
+  "name": "online-voting-system",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "cross-env NODE_ENV=production node server.js",
+    "dev": "cross-env NODE_ENV=development node server.js",
+    "client": "cd client && npm run dev",
+    "build": "cd client && npm run build",
+    "dev:all": "concurrently -n \"api,client\" -c \"blue,green\" \"npm run dev\" \"npm run client\"",
+    "kill:all": "powershell -Command \"Get-Process -Name node -ErrorAction SilentlyContinue | Stop-Process -Force\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.0",
+    "sqlite3": "^5.1.7"
+  },
+   "devDependencies": {
+     "concurrently": "^9.2.1",
+     "cross-env": "^10.1.0"
+   }
+}
