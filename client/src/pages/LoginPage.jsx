@@ -41,11 +41,12 @@ export default function LoginPage() {
 
       const res = await api.post('/auth/forgot-password', { email: email.trim() })
       setMsg({ type: 'success', text: 'Password reset instructions sent to your email' })
-      // Demo behavior: server returns resetToken for development
-      if (res.data?.resetToken) {
-        setResetToken(res.data.resetToken)
-      }
-      setResetMode(true)
+      
+      // Removed DEMO behavior: In a real app, the server would send a unique URL to the user's email.
+      // Keeping the UI switch for the password reset form.
+      setResetMode(true) 
+      setResetToken(res.data?.resetToken || 'DEMO_TOKEN') // Keeping state for form visibility only
+      
     } catch (e) {
       setMsg({ type: 'error', text: e.response?.data?.error || e.message })
     } finally {
@@ -145,7 +146,12 @@ export default function LoginPage() {
                 <div className="form-group">
                   <label htmlFor="name">Full name</label>
                   <div className="input-group">
-                    <span className="input-icon">👤</span>
+                    {/* Replaced emoji with SVG icon */}
+                    <span className="input-icon">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"/>
+                      </svg>
+                    </span>
                     <input id="name" type="text" placeholder="John Doe" value={name} onChange={e => setName(e.target.value)} disabled={loading} />
                   </div>
                 </div>
@@ -155,7 +161,13 @@ export default function LoginPage() {
                 <div className="form-group">
                   <label htmlFor="email">Email address</label>
                   <div className="input-group">
-                    <span className="input-icon">✉️</span>
+                    {/* Replaced emoji with SVG icon */}
+                    <span className="input-icon">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"/>
+                        <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"/>
+                      </svg>
+                    </span>
                     <input id="email" type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} disabled={loading} />
                   </div>
                 </div>
@@ -165,7 +177,12 @@ export default function LoginPage() {
                 <div className="form-group">
                   <label htmlFor="password">Password</label>
                   <div className="input-group">
-                    <span className="input-icon">🔒</span>
+                    {/* Replaced emoji with SVG icon */}
+                    <span className="input-icon">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd"/>
+                      </svg>
+                    </span>
                     <input id="password" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} disabled={loading} />
                   </div>
                 </div>
@@ -175,20 +192,18 @@ export default function LoginPage() {
                 <div className="form-group">
                   <label htmlFor="newPassword">New Password</label>
                   <div className="input-group">
-                    <span className="input-icon">🔑</span>
+                    {/* Replaced emoji with SVG icon */}
+                    <span className="input-icon">
+                       <svg xmlns="http://www.w3.org/2000/svg" className="icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2V7a5 5 0 00-5-5zm-2 5a3 3 0 016 0v2h-6V7z" />
+                      </svg>
+                    </span>
                     <input id="newPassword" type="password" placeholder="Enter new password (min 6 chars)" value={newPassword} onChange={e => setNewPassword(e.target.value)} disabled={loading} />
                   </div>
                 </div>
               )}
 
-              {resetToken && (
-                <div className="form-group">
-                  <label>Reset Token (demo)</label>
-                  <div className="input-group">
-                    <input readOnly value={resetToken} />
-                  </div>
-                </div>
-              )}
+              {/* REMOVED: resetToken display for demo */}
 
               <div className="auth-actions">
                 <button type="submit" className={`button primary ${loading ? 'loading' : ''}`} disabled={loading}>
@@ -251,7 +266,16 @@ export default function LoginPage() {
         .auth-header { text-align: center; margin-bottom: 1.5rem; }
         .form-group { margin-bottom: 1rem; }
         .input-group { position: relative; }
-        .input-icon { position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); }
+        .input-icon { 
+            position: absolute; 
+            left: 0.75rem; 
+            top: 50%; 
+            transform: translateY(-50%); 
+            display: flex;
+            align-items: center;
+            color: var(--gray-600);
+        }
+        .input-icon .icon { width: 1.25rem; height: 1.25rem; }
         .input-group input { padding-left: 2.5rem; width: 100%; }
         .auth-actions { margin-top: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; }
         .auth-links { display:flex; gap:0.5rem; justify-content: space-between; align-items:center; }

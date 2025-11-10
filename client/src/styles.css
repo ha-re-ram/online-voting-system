@@ -69,15 +69,17 @@ button.small {
   font-size: 0.75rem;
 }
 
+/* Secondary Button - Changed to be distinct */
 button.secondary {
-  background: blue;
-  border: 1px solid var(--gray-200);
-  color: white;
+  background: white;
+  border: 1px solid var(--primary);
+  color: var(--primary);
 }
 
 button.secondary:hover {
-  background: blue;
-  border-color: var(--gray-300);
+  background: var(--primary-50);
+  border-color: var(--primary-dark);
+  color: var(--primary-dark);
 }
 
 button.danger {
@@ -88,18 +90,19 @@ button.danger:hover {
   background: #dc2626;
 }
 
-/* ghost button style used across components */
+/* ghost button style used across components - Changed to be distinct */
 .button.ghost,
 button.ghost {
-  background: blue;
-  color: white;
-  border: 1px solid var(--gray-200);
+  background: transparent;
+  color: var(--gray-700);
+  border: 1px solid var(--gray-300);
 }
 
 .button.ghost:hover,
 button.ghost:hover {
-  background: blue;
-  color: white;
+  background: var(--gray-100);
+  color: var(--gray-900);
+  border-color: var(--gray-400);
 }
 
 input, select, textarea {

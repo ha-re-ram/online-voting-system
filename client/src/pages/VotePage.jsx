@@ -130,8 +130,7 @@ export default function VotePage(){
           gap: 0.75rem; 
           align-items: center; 
           padding: 0.75rem; 
-          border-radius: 0.5rem; 
-          background: blue; 
+          background: white; 
           border: 1px solid var(--gray-200); 
           cursor: pointer; 
           text-align: left; 
@@ -139,20 +138,21 @@ export default function VotePage(){
           min-width: 200px;
         }
         .candidate-card:hover { 
-          background: blue;
-          border-color: #4287f5;
-          box-shadow: 0 2px 4px rgba(66,135,245,0.1);
+          background: var(--primary-light);
+          border-color: var(--primary);
+          box-shadow: 0 2px 4px rgba(37, 99, 235, 0.1);
           transform: translateY(-1px);
+          color: var(--gray-900);
         }
         .candidate-card:focus { 
           outline: none; 
-          box-shadow: 0 0 0 3px rgba(66,135,245,0.25);
+          box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
         }
         .candidate-card.selected { 
-          background: #1a67e5; 
-          border-color: #1a67e5;
+          background: var(--primary); 
+          border-color: var(--primary);
           color: white;
-          box-shadow: 0 2px 4px rgba(26,103,229,0.2);
+          box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
         }
         .candidate-card.selected .text-muted,
         .candidate-card.selected .candidate-name { 
@@ -160,8 +160,8 @@ export default function VotePage(){
           opacity: 1;
         }
         .candidate-avatar {
-          background: #e8f0fe;
-          color: #1a67e5;
+          background: var(--gray-100);
+          color: var(--primary);
         }
         .candidate-card.selected .candidate-avatar {
           background: rgba(255,255,255,0.2);
