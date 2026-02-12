@@ -21,7 +21,10 @@ if (process.env.NODE_ENV === 'production') {
 const dbPath = path.resolve(__dirname, 'voting.db');
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) console.error('Error connecting to DB', err);
-  else console.log('Connected to SQLite database.');
+  else {
+    console.log('Connected to SQLite database.');
+    db.run('PRAGMA journal_mode = WAL'); // Enable WAL mode for better concurrency
+  }
 });
 
 // Attach DB to app for testing purposes
@@ -54,13 +57,22 @@ db.serialize(() => {
     FOREIGN KEY(election_id) REFERENCES elections(id)
   )`);
 
-  db.run(`CREATE TABLE IF NOT EXISTS votes (
+  // Track WHO voted (but not for whom) - Ensures one vote per person per election
+  db.run(`CREATE TABLE IF NOT EXISTS participation (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     voter_email TEXT NOT NULL,
     election_id INTEGER NOT NULL,
-    candidate_id INTEGER NOT NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(voter_email, election_id),
     FOREIGN KEY(voter_email) REFERENCES users(email),
+    FOREIGN KEY(election_id) REFERENCES elections(id)
+  )`);
+
+  // Track WHAT was voted (but not by whom) - The actual anonymous ballots
+  db.run(`CREATE TABLE IF NOT EXISTS ballots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    election_id INTEGER NOT NULL,
+    candidate_id INTEGER NOT NULL,
     FOREIGN KEY(election_id) REFERENCES elections(id),
     FOREIGN KEY(candidate_id) REFERENCES candidates(id)
   )`);
@@ -76,7 +88,7 @@ function authMiddleware(req, res, next) {
     try {
       const payload = jwt.verify(token, JWT_SECRET);
       // We attach the decoded payload (containing user info) to the request
-      req.user = payload; 
+      req.user = payload;
       return next();
     } catch (e) {
       return res.status(401).json({ error: 'Invalid or expired token' });
@@ -178,29 +190,54 @@ app.get('/candidates/:electionId', authMiddleware, (req, res) => {
   });
 });
 
-// 3. Cast a vote (used by VotePage)
+// 3. Cast a vote (used by VotePage) - SECURE & RELIABLE IMPLEMENTATION
 app.post('/vote', authMiddleware, (req, res) => {
   const { election_id, candidate_id } = req.body;
   const voter_email = req.user.email; // Get email from authenticated user payload
 
   if (!election_id || !candidate_id) return res.status(400).json({ error: 'Election ID and Candidate ID required' });
 
-  // Insert vote with UNIQUE constraint handling
-  app.db.run('INSERT INTO votes (voter_email, election_id, candidate_id) VALUES (?, ?, ?)', 
-    [voter_email, election_id, candidate_id], 
-    function (err) {
-      if (err && err.message.includes('UNIQUE constraint failed')) {
-        return res.status(400).json({ error: 'You have already voted in this election' });
-      }
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ message: 'Your vote was recorded', vote_id: this.lastID });
-    }
-  );
+  // Use a transaction to ensure atomicity
+  const voteTransaction = () => {
+    app.db.serialize(() => {
+      app.db.run('BEGIN TRANSACTION');
+
+      // 1. Check/Insert into participation to ensure only one vote per election
+      app.db.run('INSERT INTO participation (voter_email, election_id) VALUES (?, ?)',
+        [voter_email, election_id],
+        function (err) {
+          if (err) {
+            app.db.run('ROLLBACK');
+            if (err.message.includes('UNIQUE constraint failed')) {
+              return res.status(400).json({ error: 'You have already voted in this election' });
+            }
+            return res.status(500).json({ error: 'Failed to record participation: ' + err.message });
+          }
+
+          // 2. Insert anonymous ballot
+          app.db.run('INSERT INTO ballots (election_id, candidate_id) VALUES (?, ?)',
+            [election_id, candidate_id],
+            function (err) {
+              if (err) {
+                app.db.run('ROLLBACK');
+                return res.status(500).json({ error: 'Failed to cast ballot: ' + err.message });
+              }
+
+              app.db.run('COMMIT');
+              res.json({ message: 'Your vote was recorded securely', vote_id: this.lastID });
+            }
+          );
+        }
+      );
+    });
+  };
+
+  voteTransaction();
 });
 
-// 4. Get all votes (used by Dashboard stats)
+// 4. Get all ballots (used by Dashboard stats, anonymized)
 app.get('/all-votes', authMiddleware, (req, res) => {
-  app.db.all('SELECT id, voter_email, election_id, candidate_id FROM votes', (err, rows) => {
+  app.db.all('SELECT id, election_id, candidate_id FROM ballots', (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
@@ -212,9 +249,9 @@ app.get('/results/:electionId', authMiddleware, (req, res) => {
   const sql = `
     SELECT
       c.name AS candidate_name,
-      COUNT(v.id) AS total_votes
+      COUNT(b.id) AS total_votes
     FROM candidates c
-    LEFT JOIN votes v ON c.id = v.candidate_id
+    LEFT JOIN ballots b ON c.id = b.candidate_id
     WHERE c.election_id = ?
     GROUP BY c.id, c.name
     ORDER BY total_votes DESC
@@ -260,7 +297,10 @@ app.post('/candidates/add', authMiddleware, adminMiddleware, (req, res) => {
 app.delete('/election/:id', authMiddleware, adminMiddleware, (req, res) => {
   const { id } = req.params;
   app.db.serialize(() => {
-    app.db.run('DELETE FROM votes WHERE election_id = ?', [id]);
+    // Clean up both participation records and ballots
+    app.db.run('DELETE FROM participation WHERE election_id = ?', [id]);
+    app.db.run('DELETE FROM ballots WHERE election_id = ?', [id]);
+
     app.db.run('DELETE FROM candidates WHERE election_id = ?', [id]);
     app.db.run('DELETE FROM elections WHERE id = ?', [id], function (err) {
       if (err) return res.status(500).json({ error: err.message });
@@ -274,7 +314,7 @@ app.delete('/election/:id', authMiddleware, adminMiddleware, (req, res) => {
 app.delete('/candidate/:id', authMiddleware, adminMiddleware, (req, res) => {
   const { id } = req.params;
   app.db.serialize(() => {
-    app.db.run('DELETE FROM votes WHERE candidate_id = ?', [id]);
+    app.db.run('DELETE FROM ballots WHERE candidate_id = ?', [id]);
     app.db.run('DELETE FROM candidates WHERE id = ?', [id], function (err) {
       if (err) return res.status(500).json({ error: err.message });
       if (this.changes === 0) return res.status(404).json({ error: 'Candidate not found' });
@@ -290,9 +330,10 @@ app.delete('/user/:id', authMiddleware, adminMiddleware, (req, res) => {
     app.db.get('SELECT email FROM users WHERE id = ?', [id], (err, user) => {
       if (err) return res.status(500).json({ error: err.message });
       if (!user) return res.status(404).json({ error: 'User not found' });
-      
-      app.db.run('DELETE FROM votes WHERE voter_email = ?', [user.email]);
-      
+
+      // Clean up participation (we don't delete their ballots because they are anonymous)
+      app.db.run('DELETE FROM participation WHERE voter_email = ?', [user.email]);
+
       app.db.run('DELETE FROM users WHERE id = ?', [id], function (err) {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ message: 'User deleted' });
