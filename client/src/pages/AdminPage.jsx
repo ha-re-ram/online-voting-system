@@ -6,6 +6,10 @@ export default function AdminPage(){
   const [candidates, setCandidates] = useState([])
   const [users, setUsers] = useState([])
   const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [formCandidates, setFormCandidates] = useState(['', ''])
   const [candidateName, setCandidateName] = useState('')
   const [selectedElection, setSelectedElection] = useState('')
   const [msg, setMsg] = useState(null)
@@ -42,10 +46,30 @@ export default function AdminPage(){
   }
 
   async function createElection(){
+    if(!title.trim()) {
+      setMsg('Election title is required')
+      return
+    }
+    const validCandidates = formCandidates.filter(c => c.trim() !== '')
+    if (validCandidates.length < 2) {
+      setMsg('An election must have at least 2 candidates')
+      return
+    }
+
     try{
-      const res = await api.post('/elections/create', { title, description: '' })
-      setMsg(res.data.message || 'Created')
+      const res = await api.post('/elections/create', { 
+        title: title.trim(), 
+        description: description.trim(),
+        start_date: startDate || null,
+        end_date: endDate || null,
+        candidates: validCandidates
+      })
+      setMsg(res.data.message || 'Election created successfully')
       setTitle('')
+      setDescription('')
+      setStartDate('')
+      setEndDate('')
+      setFormCandidates(['', ''])
       loadElections()
     } catch(e){ setMsg(e.response?.data?.error || e.message) }
   }
@@ -131,20 +155,111 @@ export default function AdminPage(){
         {tab === 'elections' ? (
           <div className="admin-grid">
             <div className="main-content">
-              <div className="card">
+              {/* Create Election Form Card */}
+              <div className="card" style={{ marginBottom: '24px' }}>
                 <div className="card-header">
-                  <h3>Elections</h3>
-                  <div className="actions">
+                  <h3>Create New Election</h3>
+                </div>
+                <div style={{ marginTop: '16px', display: 'grid', gap: '16px' }}>
+                  <div className="form-group">
+                    <label htmlFor="election-title" style={{ fontWeight: '600', display: 'block', marginBottom: '6px' }}>Election Title</label>
                     <input 
+                      id="election-title"
                       value={title} 
                       onChange={e=>setTitle(e.target.value)} 
-                      placeholder="New election title..." 
-                      className="compact"
+                      placeholder="e.g., Presidential Election 2026" 
+                      style={{ width: '100%' }}
                     />
-                    <button onClick={createElection} className="primary small">
-                      Create Election
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="election-desc" style={{ fontWeight: '600', display: 'block', marginBottom: '6px' }}>Description</label>
+                    <textarea 
+                      id="election-desc"
+                      value={description} 
+                      onChange={e=>setDescription(e.target.value)} 
+                      placeholder="Provide description or instructions for this election..." 
+                      rows="3"
+                      style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid var(--gray-200)' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div className="form-group">
+                      <label htmlFor="start-date" style={{ fontWeight: '600', display: 'block', marginBottom: '6px' }}>Start Date & Time</label>
+                      <input 
+                        id="start-date"
+                        type="datetime-local"
+                        value={startDate} 
+                        onChange={e=>setStartDate(e.target.value)} 
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="end-date" style={{ fontWeight: '600', display: 'block', marginBottom: '6px' }}>End Date & Time</label>
+                      <input 
+                        id="end-date"
+                        type="datetime-local"
+                        value={endDate} 
+                        onChange={e=>setEndDate(e.target.value)} 
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <label style={{ fontWeight: '600' }}>Initial Candidates List</label>
+                      <button 
+                        type="button" 
+                        className="button secondary small"
+                        onClick={() => setFormCandidates([...formCandidates, ''])}
+                        style={{ padding: '4px 8px', fontSize: '0.8rem' }}
+                      >
+                        + Add Candidate Field
+                      </button>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      {formCandidates.map((cand, idx) => (
+                        <div key={idx} style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          <input 
+                            value={cand} 
+                            onChange={e => {
+                              const updated = [...formCandidates]
+                              updated[idx] = e.target.value
+                              setFormCandidates(updated)
+                            }} 
+                            placeholder={`Candidate #${idx + 1} Name`}
+                            style={{ width: '100%', marginBottom: 0 }}
+                          />
+                          {formCandidates.length > 2 && (
+                            <button 
+                              type="button" 
+                              className="button danger small icon-only" 
+                              onClick={() => setFormCandidates(formCandidates.filter((_, i) => i !== idx))}
+                              style={{ padding: '6px', borderRadius: '6px', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                              title="Remove slot"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+                    <button onClick={createElection} className="button primary">
+                      Create Election & Candidates
                     </button>
                   </div>
+                </div>
+              </div>
+
+              {/* Elections List Card */}
+              <div className="card">
+                <div className="card-header">
+                  <h3>Active & Completed Elections</h3>
                 </div>
 
                 <div className="list">

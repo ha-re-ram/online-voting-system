@@ -13,6 +13,14 @@ function RequireAuth({ children }){
   return children
 }
 
+function RequireAdmin({ children }){
+  const token = localStorage.getItem('token')
+  const user = JSON.parse(localStorage.getItem('user') || 'null')
+  if(!token) return <Navigate to="/login" replace />
+  if(user?.role !== 'admin') return <Navigate to="/dashboard" replace />
+  return children
+}
+
 export default function App(){
   return (
     <div>
@@ -22,10 +30,10 @@ export default function App(){
         <Route path="/login" element={<LoginPage/>} />
         <Route path="/dashboard" element={<RequireAuth><Dashboard/></RequireAuth>} />
         <Route path="/vote" element={<RequireAuth><VotePage/></RequireAuth>} />
-  <Route path="/results" element={<RequireAuth><ResultsPage/></RequireAuth>} />
-  {/* support direct links like /results/123 from Dashboard */}
-  <Route path="/results/:id" element={<RequireAuth><ResultsPage/></RequireAuth>} />
-        <Route path="/admin" element={<RequireAuth><AdminPage/></RequireAuth>} />
+        <Route path="/results" element={<ResultsPage/>} />
+        {/* support direct links like /results/123 from Dashboard */}
+        <Route path="/results/:id" element={<ResultsPage/>} />
+        <Route path="/admin" element={<RequireAdmin><AdminPage/></RequireAdmin>} />
       </Routes>
     </div>
   )

@@ -9,7 +9,23 @@ const app = express();
 const PORT = 4000;
 
 app.use(express.json());
-app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:5174'], credentials: true }));
+
+const allowedOrigins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(',') 
+  : ['http://localhost:5173', 'http://localhost:5174'];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
+      return callback(null, true);
+    }
+    return callback(new Error('The CORS policy for this site does not allow access from the specified Origin.'), false);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret';
 
@@ -105,6 +121,21 @@ function adminMiddleware(req, res, next) {
   return res.status(403).json({ error: 'Admin access required' });
 }
 
+// Optional Authentication Middleware: Attempts to verify JWT but does not block if missing/invalid
+function optionalAuthMiddleware(req, res, next) {
+  const auth = req.headers['authorization'];
+  if (auth && auth.startsWith('Bearer ')) {
+    const token = auth.split(' ')[1];
+    try {
+      const payload = jwt.verify(token, JWT_SECRET);
+      req.user = payload;
+    } catch (e) {
+      // Continue unauthenticated if token is invalid or expired
+    }
+  }
+  next();
+}
+
 // --- AUTH ROUTES ---
 
 app.post('/auth/forgot-password', (req, res) => {
@@ -173,20 +204,52 @@ app.post('/auth/login', (req, res) => {
 
 // --- PUBLIC ROUTES (FOR ANY AUTHENTICATED USER) ---
 
-// 1. Get all elections (used by Dashboard, VotePage, ResultsPage)
-app.get('/elections', authMiddleware, (req, res) => {
-  app.db.all('SELECT id, title, description FROM elections', (err, rows) => {
+// Get election IDs that the current user has voted in (requires auth)
+app.get('/my-votes', authMiddleware, (req, res) => {
+  const voter_email = req.user.email;
+  app.db.all('SELECT election_id FROM participation WHERE voter_email = ?', [voter_email], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
+    res.json(rows.map(row => row.election_id));
   });
 });
 
-// 2. Get candidates for a specific election (used by VotePage, AdminPage, Dashboard)
-app.get('/candidates/:electionId', authMiddleware, (req, res) => {
+// 1. Get all elections (public for ended elections, authenticated for active ones)
+app.get('/elections', optionalAuthMiddleware, (req, res) => {
+  if (req.user) {
+    // Authenticated users get all elections
+    app.db.all('SELECT id, title, description, start_date, end_date FROM elections', (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(rows);
+    });
+  } else {
+    // Unauthenticated users only see ended elections
+    const now = new Date().toISOString();
+    app.db.all('SELECT id, title, description, start_date, end_date FROM elections WHERE end_date IS NOT NULL AND end_date < ?', [now], (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(rows);
+    });
+  }
+});
+
+// 2. Get candidates for a specific election (public for ended, authenticated for active)
+app.get('/candidates/:electionId', optionalAuthMiddleware, (req, res) => {
   const { electionId } = req.params;
-  app.db.all('SELECT id, election_id, name FROM candidates WHERE election_id = ?', [electionId], (err, rows) => {
+  
+  app.db.get('SELECT end_date FROM elections WHERE id = ?', [electionId], (err, election) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
+    if (!election) return res.status(404).json({ error: 'Election not found' });
+
+    const now = new Date().toISOString();
+    const hasEnded = election.end_date && new Date(election.end_date) < new Date();
+
+    if (!req.user && !hasEnded) {
+      return res.status(401).json({ error: 'Authentication required to view active election candidates' });
+    }
+
+    app.db.all('SELECT id, election_id, name FROM candidates WHERE election_id = ?', [electionId], (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(rows);
+    });
   });
 });
 
@@ -243,22 +306,35 @@ app.get('/all-votes', authMiddleware, (req, res) => {
   });
 });
 
-// 5. Get aggregated results for a specific election (used by ResultsPage)
-app.get('/results/:electionId', authMiddleware, (req, res) => {
+// 5. Get aggregated results for a specific election (public for ended elections, authenticated for active ones)
+app.get('/results/:electionId', optionalAuthMiddleware, (req, res) => {
   const { electionId } = req.params;
-  const sql = `
-    SELECT
-      c.name AS candidate_name,
-      COUNT(b.id) AS total_votes
-    FROM candidates c
-    LEFT JOIN ballots b ON c.id = b.candidate_id
-    WHERE c.election_id = ?
-    GROUP BY c.id, c.name
-    ORDER BY total_votes DESC
-  `;
-  app.db.all(sql, [electionId], (err, rows) => {
+  
+  app.db.get('SELECT end_date FROM elections WHERE id = ?', [electionId], (err, election) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.json({ election_id: electionId, results: rows });
+    if (!election) return res.status(404).json({ error: 'Election not found' });
+
+    const now = new Date().toISOString();
+    const hasEnded = election.end_date && new Date(election.end_date) < new Date();
+
+    if (!req.user && !hasEnded) {
+      return res.status(401).json({ error: 'Authentication required to view active election results' });
+    }
+
+    const sql = `
+      SELECT
+        c.name AS candidate_name,
+        COUNT(b.id) AS total_votes
+      FROM candidates c
+      LEFT JOIN ballots b ON c.id = b.candidate_id
+      WHERE c.election_id = ?
+      GROUP BY c.id, c.name
+      ORDER BY total_votes DESC
+    `;
+    app.db.all(sql, [electionId], (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ election_id: electionId, results: rows });
+    });
   });
 });
 
@@ -273,14 +349,48 @@ app.get('/users', authMiddleware, adminMiddleware, (req, res) => {
   });
 });
 
-// 7. Create new election (used by AdminPage)
-app.post('/elections/create', authMiddleware, adminMiddleware, (req, res) => {
-  const { title, description } = req.body;
+// 7. Create new election with candidates and dates (used by AdminPage)
+app.post('/elections/create', authMiddleware, adminMiddleware, async (req, res) => {
+  const { title, description, start_date, end_date, candidates } = req.body;
   if (!title) return res.status(400).json({ error: 'Title is required' });
-  app.db.run('INSERT INTO elections (title, description) VALUES (?, ?)', [title, description], function (err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ message: 'Election created', id: this.lastID });
+
+  const runQuery = (sql, params) => new Promise((resolve, reject) => {
+    app.db.run(sql, params, function(err) {
+      if (err) reject(err);
+      else resolve(this);
+    });
   });
+
+  try {
+    await runQuery('BEGIN TRANSACTION');
+    
+    const electionResult = await runQuery(
+      'INSERT INTO elections (title, description, start_date, end_date) VALUES (?, ?, ?, ?)',
+      [title, description || '', start_date || null, end_date || null]
+    );
+    const electionId = electionResult.lastID;
+
+    if (Array.isArray(candidates) && candidates.length > 0) {
+      for (const name of candidates) {
+        if (name && name.trim()) {
+          await runQuery(
+            'INSERT INTO candidates (election_id, name) VALUES (?, ?)',
+            [electionId, name.trim()]
+          );
+        }
+      }
+    }
+
+    await runQuery('COMMIT');
+    res.json({ message: 'Election created successfully with candidates', id: electionId });
+  } catch (err) {
+    try {
+      await runQuery('ROLLBACK');
+    } catch (e) {
+      // Rollback might fail if not in transaction, ignore
+    }
+    res.status(500).json({ error: 'Failed to create election: ' + err.message });
+  }
 });
 
 // 8. Add candidate (used by AdminPage)

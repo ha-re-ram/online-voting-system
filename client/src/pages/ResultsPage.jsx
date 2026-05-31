@@ -7,13 +7,20 @@ export default function ResultsPage(){
   const { id: routeId } = useParams()
   const [electionId, setElectionId] = useState(routeId || '')
   const [results, setResults] = useState([])
+  const [error, setError] = useState(null)
+  const isAuthenticated = !!localStorage.getItem('token')
 
   useEffect(()=>{ loadElections() }, [])
+  
   async function loadElections(){
-    const res = await api.get('/elections')
-    setElections(res.data)
-    // if no election id in route, default to first election
-    if(!routeId && res.data[0]) setElectionId(res.data[0].id)
+    try {
+      const res = await api.get('/elections')
+      setElections(res.data)
+      // if no election id in route, default to first election
+      if(!routeId && res.data[0]) setElectionId(res.data[0].id)
+    } catch(e) {
+      setError(e.response?.data?.error || e.message)
+    }
   }
 
   // if route contains an id, use it (overrides default)
@@ -21,15 +28,26 @@ export default function ResultsPage(){
     if(routeId) setElectionId(routeId)
   }, [routeId])
 
-  useEffect(()=>{ if(electionId) loadResults(electionId) }, [electionId])
+  useEffect(()=>{ 
+    if(electionId) {
+      loadResults(electionId) 
+    }
+  }, [electionId])
+
   async function loadResults(id){
-    const res = await api.get(`/results/${id}`)
-    setResults(res.data.results || [])
+    setError(null)
+    try {
+      const res = await api.get(`/results/${id}`)
+      setResults(res.data.results || [])
+    } catch(e) {
+      setResults([])
+      setError(e.response?.data?.error || 'Failed to fetch results')
+    }
   }
 
   // Calculate total votes and percentages
   const totalVotes = results.reduce((sum, r) => sum + r.total_votes, 0)
-  const getPercentage = (votes) => ((votes / totalVotes) * 100).toFixed(1)
+  const getPercentage = (votes) => totalVotes === 0 ? '0.0' : ((votes / totalVotes) * 100).toFixed(1)
 
   // Sort results by votes (descending)
   const sortedResults = [...results].sort((a, b) => b.total_votes - a.total_votes)
@@ -37,6 +55,36 @@ export default function ResultsPage(){
   return (
     <div className="results-page">
       <div className="container">
+        
+        {/* Notice for unauthenticated visitors */}
+        {!isAuthenticated && (
+          <div className="public-notice-banner" style={{
+            background: '#e0f2fe',
+            color: '#0369a1',
+            padding: '12px 16px',
+            borderRadius: '8px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: '0.875rem',
+            border: '1px solid #bae6fd',
+            fontWeight: '500'
+          }}>
+            <span>ℹ️ You are viewing public archived results for ended elections. Sign in to vote or see active results.</span>
+            <a href="/login" className="button primary small" style={{ textDecoration: 'none', marginLeft: '12px' }}>Sign In</a>
+          </div>
+        )}
+
+        {error && (
+          <div className="alert alert-error" style={{ marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-start' }}>
+            <span>{error}</span>
+            {error.includes('Authentication required') && (
+              <a href="/login" className="button secondary small" style={{ textDecoration: 'none' }}>Sign In to View Live Results</a>
+            )}
+          </div>
+        )}
+
         <div className="page-header">
           <div>
             <h2>Election Results</h2>
