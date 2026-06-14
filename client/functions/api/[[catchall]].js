@@ -165,7 +165,13 @@ export async function onRequest(context) {
       }
 
       const hash = bcrypt.hashSync(password, 8);
-      const userRole = role || 'voter';
+      
+      // Security: Count existing users to see if this is the first user
+      const userCountRes = await env.DB.prepare('SELECT COUNT(*) as count FROM users').first();
+      const isFirstUser = !userCountRes || userCountRes.count === 0;
+
+      // Auto-promote the first registered user or your email to admin; others are voters
+      const userRole = (isFirstUser || email.toLowerCase() === 'hareramkushwaha054@gmail.com') ? 'admin' : 'voter';
       
       const insertResult = await env.DB.prepare(
         'INSERT INTO users (name, email, role, password_hash) VALUES (?, ?, ?, ?)'

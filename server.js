@@ -175,16 +175,22 @@ app.post('/auth/reset-password', (req, res) => {
   }
 });
 
-// Existing /auth/register and /auth/login remain as is
 app.post('/auth/register', (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password } = req.body;
   if (!name || !email || !password) return res.status(400).json({ error: 'name, email and password required' });
   const hash = bcrypt.hashSync(password, 10);
-  db.run('INSERT INTO users (name, email, role, password_hash) VALUES (?, ?, ?, ?)', [name, email, role || 'voter', hash], function (err) {
+  
+  db.get('SELECT COUNT(*) as count FROM users', (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
-    const user = { id: this.lastID, name, email, role: role || 'voter' };
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '8h' });
-    res.json({ message: 'registered', user, token });
+    const isFirstUser = !row || row.count === 0;
+    const userRole = (isFirstUser || email.toLowerCase() === 'hareramkushwaha054@gmail.com') ? 'admin' : 'voter';
+    
+    db.run('INSERT INTO users (name, email, role, password_hash) VALUES (?, ?, ?, ?)', [name, email, userRole, hash], function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      const user = { id: this.lastID, name, email, role: userRole };
+      const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '8h' });
+      res.json({ message: 'registered', user, token });
+    });
   });
 });
 
