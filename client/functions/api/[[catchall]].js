@@ -164,7 +164,7 @@ export async function onRequest(context) {
         return makeResponse({ error: 'User already exists' }, 400);
       }
 
-      const hash = bcrypt.hashSync(password, 10);
+      const hash = bcrypt.hashSync(password, 8);
       const userRole = role || 'voter';
       
       const insertResult = await env.DB.prepare(
@@ -244,7 +244,7 @@ export async function onRequest(context) {
           return makeResponse({ error: 'Reset token has expired' }, 400);
         }
 
-        const hash = bcrypt.hashSync(newPassword, 10);
+        const hash = bcrypt.hashSync(newPassword, 8);
         await env.DB.prepare('UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL WHERE email = ?')
           .bind(hash, decoded.email)
           .run();
